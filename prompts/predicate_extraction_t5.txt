@@ -1,0 +1,1 @@
+Extract predicates in alphabetical order from a given Natural Language sentence: 
