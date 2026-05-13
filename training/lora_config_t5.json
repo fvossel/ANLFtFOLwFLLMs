@@ -1,0 +1,15 @@
+{
+    "r": 16,
+    "lora_alpha": 32,
+    "target_modules": [
+        "q",
+        "k",
+        "v",
+        "o",
+        "wi",
+        "wo"
+    ],
+    "lora_dropout": 0.05,
+    "bias": "none",
+    "task_type": "SEQ_2_SEQ_LM"
+}

@@ -7,7 +7,6 @@ load_dotenv()
 
 from utils.datasets.load_dataset import load_json_data
 from utils.inference.decoder_only import load_decoder_only_for_inference, run_batch_inference
-from utils.prompts import load_system_prompt_from_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,7 +23,8 @@ def main():
     parser.add_argument("--output_path", type=str)
     args = parser.parse_args()
 
-    systemprompt = load_system_prompt_from_file(args.systemprompt_path)
+    with open(args.systemprompt_path, "r", encoding="utf-8") as f:
+        systemprompt = f.read()
 
     model, tokenizer = load_decoder_only_for_inference(
         args.model_name, adapter_path=args.adapter_path, merge_adapter=True

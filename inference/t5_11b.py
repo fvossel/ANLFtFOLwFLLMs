@@ -14,7 +14,6 @@ from tqdm import tqdm
 
 from utils.datasets.load_dataset import load_json_data
 from utils.inference.encoder_decoder import restore_fol_symbols, prepare_t5_data, tokenize_t5_dataset
-from utils.prompts import load_system_prompt_from_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,7 +51,8 @@ def main():
     parser.add_argument("--test_data_path", type=str)
     args = parser.parse_args()
     
-    T5_SYSTEM_PROMPT = load_system_prompt_from_file(args.prefix_path)
+    with open(args.prefix_path, "r", encoding="utf-8") as f:
+        T5_SYSTEM_PROMPT = f.read()
 
     tokenizer = T5Tokenizer.from_pretrained(args.model_path)
     base_model = T5ForConditionalGeneration.from_pretrained(

@@ -60,17 +60,22 @@ def load_dataset_for_decoder_only_model(
     system_prompt: str,
     train_path: str,
     eval_path: str,
+    replace_fol_symbols: bool = False,
 ) -> tuple[Dataset, Dataset]:
     """Load and format train/eval datasets for decoder-only model fine-tuning."""
     train_dataset = load_json_dataset(train_path)
     val_dataset = load_json_dataset(eval_path)
-    
+
     def formatting_func(example: dict[str, str]) -> dict:
+        fol = example["FOL"]
+        if replace_fol_symbols:
+            for symbol, token in FOL_SYMBOL_TO_TOKEN.items():
+                fol = fol.replace(symbol, token)
         return {
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": example["NL"]},
-                {"role": "assistant", "content": example["FOL"]},
+                {"role": "assistant", "content": fol},
             ]
         }
 

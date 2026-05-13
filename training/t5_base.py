@@ -1,9 +1,11 @@
+"""Full fine-tuning of T5-Base for NL→FOL translation."""
 from dotenv import load_dotenv
 load_dotenv()
 import argparse
 from transformers import T5Tokenizer, TrainingArguments, Trainer, T5ForConditionalGeneration
 import torch
 from utils.datasets.load_dataset import load_dataset_for_encoder_decoder_model
+from utils.inference.encoder_decoder import FOL_SYMBOL_TO_TOKEN
 from transformers import EarlyStoppingCallback, TrainerCallback
 
 parser = argparse.ArgumentParser()
@@ -13,11 +15,15 @@ parser.add_argument("--train_path", required=True)
 parser.add_argument("--eval_path", required=True)
 parser.add_argument("--output_dir", required=True)
 parser.add_argument("--final_model", required=True)
+parser.add_argument("--token_extension", action="store_true")
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 tokenizer = T5Tokenizer.from_pretrained(args.model)
+
+if args.token_extension:
+    tokenizer.add_tokens(list(FOL_SYMBOL_TO_TOKEN.values()))
 
 with open(args.system_prompt, "r", encoding="utf-8") as f:
     system_prompt = f.read()
@@ -29,7 +35,6 @@ train_dataset_tokenized, val_dataset_tokenized = load_dataset_for_encoder_decode
     eval_path=args.eval_path,
 )
 
-# Set up training arguments
 training_args = TrainingArguments(
     output_dir=args.output_dir,
     load_best_model_at_end=True,
@@ -45,25 +50,30 @@ training_args = TrainingArguments(
     adam_epsilon=1e-8,
     warmup_steps=500,
     gradient_accumulation_steps=1,
-    disable_tqdm=False
+    disable_tqdm=False,
 )
 
 model = T5ForConditionalGeneration.from_pretrained(args.model).to(device)
 
+if args.token_extension:
+    model.resize_token_embeddings(len(tokenizer))
+
 
 class BestModelTracker(TrainerCallback):
+    """Tracks the best checkpoint by eval loss across training epochs."""
+
     def __init__(self):
         self.best_epoch = None
         self.best_eval_loss = float('inf')
-    
+
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         if metrics.get("eval_loss", float('inf')) < self.best_eval_loss:
             self.best_eval_loss = metrics["eval_loss"]
             self.best_epoch = state.epoch
 
+
 best_model_tracker = BestModelTracker()
 
-# Create Trainer instance
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -71,14 +81,11 @@ trainer = Trainer(
     eval_dataset=val_dataset_tokenized,
     callbacks=[
         EarlyStoppingCallback(early_stopping_patience=4),
-        best_model_tracker
+        best_model_tracker,
     ],
 )
 
-# Start training
 trainer.train()
-
-# Save the trained model and tokenizer
 trainer.save_model(args.final_model)
 tokenizer.save_pretrained(args.final_model)
 

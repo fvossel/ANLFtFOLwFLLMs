@@ -38,7 +38,7 @@ def load_decoder_only_for_inference(
         use_cache=True,
         trust_remote_code=True,
         device_map="auto",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
     )
 
     if adapter_path:
@@ -60,7 +60,7 @@ def run_batch_inference(
     output_file: str,
     result_builder: Optional[Callable] = None,
     batch_size: int = 32,
-    max_new_tokens: int = 250,
+    max_new_tokens: int = 512,
     strip_input: bool = False,
 ) -> list[dict]:
     """Run batch inference on a decoder-only model.
@@ -104,8 +104,8 @@ def run_batch_inference(
                 tokenizer.decode(
                     output[input_len:],
                     skip_special_tokens=True,
-                    clean_up_tokenization_spaces=True,
-                ).strip()
+                    clean_up_tokenization_spaces=False,
+                ).strip().replace("assistant\n\n", "").replace("<|assistant|>\n", "")
                 for output in outputs
             ]
         else:

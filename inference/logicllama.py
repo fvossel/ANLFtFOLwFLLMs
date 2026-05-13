@@ -17,7 +17,6 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 from utils.datasets.load_dataset import load_json_data
-from utils.prompts import load_system_prompt_from_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,7 +83,8 @@ def main():
     parser.add_argument("--output_path", type=str)
     args = parser.parse_args()
 
-    systemprompt = load_system_prompt_from_file(args.systemprompt_path)
+    with open(args.systemprompt_path, "r", encoding="utf-8") as f:
+        systemprompt = f.read()
     model, tokenizer = load_logicllama_for_inference(args.model_name, args.adapter_path)
     data = load_json_data(args.file_path)
 
