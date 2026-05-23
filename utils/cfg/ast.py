@@ -8,7 +8,7 @@ FOLTransformer bridges the Lark parse tree to these AST nodes.
 
 from typing import List, Union, Dict
 from lark import Transformer
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import z3
 
@@ -78,6 +78,55 @@ class Node:
             raise ValueError(f"Unknown type: {t}")
         return NODE_CLASSES[t].from_dict(d)
 
+    _TREE_LABELS = {
+        "And": "∧", "Or": "∨", "Xor": "⊕",
+        "Implies": "→", "Iff": "↔", "Not": "¬",
+    }
+
+    def _tree_parts(self):
+        """Return (label, children) for tree rendering.
+
+        Leaf terms render their value in the label and have no children.
+        Atom and Function render the symbol in the label and expose their
+        argument nodes. Quantifier shows its type and bound variable.
+        Everything else falls back to its dataclass fields, treating any
+        Node-valued field as a child.
+        """
+        cls = type(self).__name__
+        if cls in ("Variable", "Constant"):
+            return f"{cls}: {self.name}", []
+        if cls == "Number":
+            return f"Number: {self.value}", []
+        if cls == "Atom":
+            return f"Atom: {self.predicate}", list(self.args)
+        if cls == "Function":
+            return f"Function: {self.name}", list(self.args)
+        if cls == "Quantifier":
+            return f"{self.type} {self.variable.name}", [self.formula]
+
+        label = self._TREE_LABELS.get(cls, cls)
+        children = []
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, Node):
+                children.append(value)
+            elif isinstance(value, list):
+                children.extend(c for c in value if isinstance(c, Node))
+        return label, children
+
+    def tree_str(self) -> str:
+        """Render the AST as a multi-line ASCII tree using ├──/└── connectors."""
+        label, children = self._tree_parts()
+        lines = [label]
+        for i, child in enumerate(children):
+            last = i == len(children) - 1
+            branch = "└── " if last else "├── "
+            prefix = "    " if last else "│   "
+            sub = child.tree_str().split("\n")
+            lines.append(branch + sub[0])
+            lines.extend(prefix + s for s in sub[1:])
+        return "\n".join(lines)
+
 
 # =========================
 # Term Nodes
@@ -113,7 +162,7 @@ class Variable(Node):
 
 @dataclass
 class Constant(Node):
-    """A ground constant or numeric literal, produced by the NAME terminal in the grammar."""
+    """A ground constant, produced by a bare NAME or by the c_-prefixed CONSTANT terminal."""
 
     name: str
 
@@ -141,7 +190,7 @@ class Constant(Node):
 
 @dataclass
 class Number(Node):
-    """A numeric literal node, only reachable via from_dict deserialization."""
+    """A numeric literal node, produced by the NUMBER terminal in the grammar."""
 
     value: Union[int, float]
 
@@ -592,9 +641,20 @@ class FOLTransformer(Transformer):
         """Transform name token into Constant node."""
         return Constant(str(items))
  
+    def const_(self, items):
+        """Transform c_-prefixed constant token into Constant node."""
+        return Constant(str(items[0]))
+ 
+    def number_(self, items):
+        """Transform numeric literal token into Number node."""
+        text = str(items[0])
+        value = float(text) if "." in text else int(text)
+        return Number(value)
+ 
     def function_(self, items):
         """Transform function application into Function node."""
-        name = str(items[0])
+        head = items[0]
+        name = head.name if isinstance(head, Constant) else str(head)
         args = items[1:]
         if args and isinstance(args[0], list):
             args = args[0]
