@@ -53,13 +53,19 @@
 ?atom_term: VARIABLE
     | NAME "(" termlist ")"                -> function_
     | NAME
+    | CONSTANT                             -> const_
+    | NUMBER                               -> number_
     | "(" term ")"
 
 PREDICATE: /[A-Z][a-zA-Z0-9]*/
 
-VARIABLE.2: /[a-z]/
+CONSTANT.3: /c_[a-zA-Z0-9]+/
 
-NAME.1: /[0-9]+(\.[0-9]+)?|[a-z][a-zA-Z0-9_.]+/
+NAME.2: /[a-z][a-zA-Z0-9]*[a-zA-Z][a-zA-Z0-9]*/
+
+VARIABLE.1: /[a-z][0-9]*/
+
+NUMBER.1: /[0-9]+(\.[0-9]+)?/
 
 FORALL: "∀"
 
