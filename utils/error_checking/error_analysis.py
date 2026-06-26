@@ -1,11 +1,9 @@
 import spacy
 import re
-from utils.cfg.cfgparser import CFGParser
-from utils.cfg.naming import NamingError
+from unicode_fol_kit import MSFLParser, NamingError, ParsingError
 from utils.error_checking.analyser.scope import ScopeAnalyzer
 from typing import Any
 from difflib import SequenceMatcher
-from lark.exceptions import UnexpectedEOF
 from tqdm import tqdm
 from multiprocessing import Pool
 
@@ -17,6 +15,74 @@ _ADVERBS_OF_DURATION = {"forever", "permanently", "temporarily", "briefly"}
 _ADVERBS_OF_FREQUENCY = {"often", "usually", "sometimes", "rarely", "occasionally"}
 _ADVERBS_OF_MANNER = {"quickly", "slowly", "carefully", "easily", "hardly"}
 _INEXPRESSIBLE_MODALS = {"could", "may", "might", "should", "ought", "would", "shall"}
+
+
+# Parsing/equivalence is delegated to unicode-fol-kit. Its parser raises
+# NamingError (lexer-level) and ParsingError (parser-level), and — unlike the
+# previous local grammar — its rendered messages deliberately omit the verbose
+# "Expected: <tokens>" list for structural-token errors. The two "after a complete
+# sub-expression" categories are therefore told apart from the STRUCTURED
+# expected-terminal set (resolved to literal symbols), reproducing the original
+# string-matched classification exactly. The two exact sets below were the only
+# ones the original mapped to those categories; every other expected set fell
+# through to "Unknown error", so EXACT set equality is required (not a subset).
+_AMBIGUITY_EXPECTED = frozenset({")", "→", "↔", "∧"})
+_WRONG_PREDICATE_EXPECTED = frozenset({"=", "<", ">", "≤", "≥", "≠", "+", "-", "*", "/"})
+_MIXING_CHARS = {"∧", "∨", "⊕"}
+_PARSE_SENTINEL = "GROVES_PARSE::"
+
+
+def _terminal_patterns(parser: MSFLParser) -> dict:
+    """Map each terminal name to its literal/regex pattern for the given parser."""
+    index = {}
+    for terminal in parser.parser.terminals:
+        pattern = terminal.pattern
+        index[terminal.name] = pattern.value if hasattr(pattern, "value") else str(pattern)
+    return index
+
+
+def _expected_literals(exc, patterns: dict) -> frozenset:
+    """Resolve an exception's expected/allowed terminal names to literal symbols."""
+    names = getattr(exc, "allowed", None) or getattr(exc, "expected", None) or set()
+    return frozenset(patterns.get(name, name) for name in names)
+
+
+def classify_parse_error(exc, patterns: dict) -> str:
+    """Map a unicode-fol-kit parse exception to a GROVES error category.
+
+    Faithful re-implementation of the original local classification, reading the
+    structured exception (type + message + expected-terminal set) instead of the
+    verbose Lark message string:
+
+      * ParsingError (unexpected token / premature EOF) -> "Unknown error"
+        (the original mapped "Incomplete formula" to Unknown).
+      * a lexer "Invalid <token>" error -> "Unallowed characters used".
+      * an unexpected character right after a comma -> "Wrong constant/function
+        naming" (a malformed argument).
+      * an unexpected junctor (∧/∨/⊕) right after a closing parenthesis, where the
+        expected set is EXACTLY {=,<,>,≤,≥,≠,+,-,*,/} -> "Wrong predicate naming"
+        (a lowercase identifier parsed as a term where a predicate was intended);
+        where it is EXACTLY {),→,↔,∧} -> "Syntactic ambiguity" (two different
+        junctors mixed without parentheses). The "after closing parenthesis" and
+        junctor-character conditions reproduce the original's requirement that the
+        no-mixing hint be present, which is what made its string match succeed.
+      * anything else -> "Unknown error".
+    """
+    if isinstance(exc, ParsingError):
+        return "Unknown error"
+    message = str(exc)
+    if "Invalid" in message:
+        return "Unallowed characters used"
+    if "after comma" in message:
+        return "Wrong constant/function naming"
+    char = getattr(exc, "char", None)
+    expected = _expected_literals(exc, patterns)
+    if char in _MIXING_CHARS and "after closing parenthesis" in message:
+        if expected == _AMBIGUITY_EXPECTED:
+            return "Syntactic ambiguity"
+        if expected == _WRONG_PREDICATE_EXPECTED:
+            return "Wrong predicate naming"
+    return "Unknown error"
 
 def _load_spacy_model():
     """
@@ -119,8 +185,9 @@ def _get_missing_words(nl_document: spacy.tokens.Doc, formula_words: set[str]) -
 
 def _process_batch(batch: list[dict]) -> list[dict]:
     """Wird in jedem Worker-Prozess ausgeführt – Parser einmal pro Batch erstellen"""
-    parser = CFGParser()
-    
+    parser = MSFLParser()
+    patterns = _terminal_patterns(parser)
+
     for entry in batch:
         errors = []
         formula = entry["FOL"]
@@ -131,13 +198,11 @@ def _process_batch(batch: list[dict]) -> list[dict]:
                 scope_analyzer.visit(parsed)
             except Exception as e:
                 errors.append(str(e))
-        except NamingError as e:
-            errors.append(str(e))
-        except UnexpectedEOF:
-            errors.append("SYNTAX_ERROR: Incomplete formula.")
-        
+        except (NamingError, ParsingError) as e:
+            errors.append(_PARSE_SENTINEL + classify_parse_error(e, patterns))
+
         entry["_parser_errors"] = errors
-    
+
     return batch
 
 
@@ -189,20 +254,17 @@ def analyze_errors(data: list[dict]) -> list[dict]:
 
         new_errors = []
         for error in errors:
-            if error.startswith("SEMANTIC_ERROR: Missing relevant word"):
+            if error.startswith(_PARSE_SENTINEL):
+                # Parser/lexer error: already resolved to a category at parse time
+                # (see classify_parse_error), since the structured expected-token
+                # set is needed to reproduce the original classification.
+                new_errors.append(error[len(_PARSE_SENTINEL):])
+            elif error.startswith("SEMANTIC_ERROR: Missing relevant word"):
                 new_errors.append("Possible incomplete formalization")
-            elif error.endswith("Expected: closing parenthesis ()), junctor (→), junctor (↔), junctor (∧). Hint: Cannot mix AND (∧), OR (∨), and XOR (⊕) operators without parentheses"):
-                new_errors.append("Syntactic ambiguity")
             elif error.startswith("FREE_VARIABLE_ERROR"):
                 new_errors.append("Free variables")
-            elif "after comma ','. Expected:" in error:
-                new_errors.append("Wrong constant/function naming")
             elif error.startswith("EXPRESSIVENESS_ERROR: Adverb"):
                 new_errors.append("Hard to express adverb")
-            elif "Expected: EQUAL (=), LESSTHAN (<), MINUS (-), MORETHAN (>), PLUS (+), SLASH (/), STAR (*), __ANON_6 (≤), __ANON_7 (≥), __ANON_8 (≠)." in error:
-                new_errors.append("Wrong predicate naming")
-            elif "Invalid" in error:
-                new_errors.append("Unallowed characters used")
             elif error.startswith("EXPRESSIVENESS_ERROR: Modal verb"):
                 new_errors.append("Hard to express modal verb")
             else:

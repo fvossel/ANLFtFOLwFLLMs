@@ -1,4 +1,4 @@
-from utils.cfg.ast import Variable, Quantifier, Node
+from unicode_fol_kit import Variable, Quantifier, Node
 
 class ScopeAnalyzer:
     """Analyzes variable scope in AST to detect unbound variables.
