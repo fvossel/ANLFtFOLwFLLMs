@@ -4,9 +4,7 @@ import logging
 
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from utils.cfg.cfgparser import CFGParser
-from utils.cfg.ast import Not
-from utils.atp.prover9_entailment import check_logical_entailment
+from unicode_fol_kit import MSFLParser, Not, check_logical_entailment
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +17,7 @@ def restore_original_predictions(data: list[dict], prediction_keys: list[str]) -
                 entry[key] = value["FOL_PRED"]
 
 
-def parse_formula(parser: CFGParser, formula: str):
+def parse_formula(parser: MSFLParser, formula: str):
     try:
         return parser.parse(formula)
     except Exception as exc:
@@ -52,7 +50,7 @@ def evaluate_group(
     conclusion_entry: dict,
     prediction_key: str,
     prover9_path: str,
-    parser: CFGParser,
+    parser: MSFLParser,
 ) -> str:
     premise_entries = [e for e in group if e is not conclusion_entry]
 
@@ -116,7 +114,7 @@ def process_group(
         logger.warning("Group ID=%s has no entry with CONCLUSION='True' — skipping", group_id)
         return group_id, {}
 
-    parser = CFGParser()
+    parser = MSFLParser()
     labels: dict[str, str] = {}
     for prediction_key in prediction_keys:
         label = evaluate_group(group, conclusion_entry, prediction_key, prover9_path, parser)

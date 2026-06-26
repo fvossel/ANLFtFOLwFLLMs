@@ -29,19 +29,19 @@ from typing import Any
 
 from tqdm import tqdm
 
-from utils.cfg.cfgparser import CFGParser
-from utils.formula_matches.match import (
+from unicode_fol_kit import MSFLParser
+from unicode_fol_kit import (
     formulas_are_identical,
     formulas_are_matched_identical,
     match_predicates,
+    formulas_are_equivalent,
 )
-from utils.atp.z3_equivalence import formulas_are_equivalent
 
 logger = logging.getLogger(__name__)
 
 RESERVED_KEYS = {"NL", "FOL"}
 
-_PARSER: CFGParser | None = None
+_PARSER: MSFLParser | None = None
 
 
 def _init_worker() -> None:
@@ -49,14 +49,14 @@ def _init_worker() -> None:
     global _PARSER
     from z3 import set_param
     set_param("parallel.enable", False)
-    _PARSER = CFGParser()
+    _PARSER = MSFLParser()
 
 
-def _get_parser() -> CFGParser:
+def _get_parser() -> MSFLParser:
     """Return the worker-local parser, creating it on demand."""
     global _PARSER
     if _PARSER is None:
-        _PARSER = CFGParser()
+        _PARSER = MSFLParser()
     return _PARSER
 
 
@@ -87,7 +87,7 @@ def evaluate_prediction(
     prediction: str,
     gold_formula: str,
     gold_formula_parsed: Any,
-    parser: CFGParser,
+    parser: MSFLParser,
 ) -> tuple[bool, bool, bool, bool]:
     """Evaluate a single prediction against the gold standard formula."""
     identical = formulas_are_identical(prediction, gold_formula)
@@ -176,7 +176,7 @@ def parse_args() -> argparse.Namespace:
         metavar="N",
         help=(
             "Number of parallel worker processes. Each worker maintains its own "
-            "CFGParser instance and Z3 context. Use 1 (default) for sequential "
+            "MSFLParser instance and Z3 context. Use 1 (default) for sequential "
             "execution, which is easier to debug. Higher values can speed up "
             "large datasets on multi-core machines."
         ),

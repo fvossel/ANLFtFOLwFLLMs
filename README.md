@@ -31,9 +31,8 @@ This sets up a Python virtual environment and installs all required dependencies
 - `prompts/` — system prompts for the different settings: `standard_t5`, `standard_decoder`, `predicate_extraction_t5`, `predicate_extraction_decoder`, `groves_generation` (Gemini regeneration), `groves_correction` (gpt-oss-120b correction pass).
 - `evaluation/` — metric computation and reporting: `calculate_metrics.py`, `print_metrics.py` (exact match + Z3 logical equivalence) and the FOLIO-specific counterparts `calculate_metrics_folio.py`, `print_metrics_folio.py` (Prover9 entailment).
 - `results/` — pre-computed prediction files and Markdown summary tables for the experiments in the paper (baseline, predicate-list, predicate-list+noise, multilingual, token-extension, two-step, curriculum, FOLIO, GROVES).
-- `utils/cfg/` — the Lark grammar (`syntax.lark`), parser, AST, and naming utilities used for parsing FOL formulas.
-- `utils/atp/` — Z3-based logical equivalence checking (`z3_equivalence.py`) and Prover9-based entailment checking (`prover9_entailment.py`).
-- `utils/formula_matches/` — exact and predicate-matched string comparison via normalised Levenshtein distance.
+- `utils/cfg/` — the Lark grammar (`syntax.lark`), parser, AST, and naming utilities used by the GROVES error-analysis pipeline (`utils/error_checking/`). Evaluation itself no longer uses these — it parses via [`unicode-fol-kit`](https://github.com/fvossel/unicode-fol-kit).
+- Logical equivalence (Z3), entailment (Prover9), FOL parsing, and predicate-matched string comparison are provided by [`unicode-fol-kit`](https://github.com/fvossel/unicode-fol-kit) (a dependency, see `requirements.txt`): the evaluation scripts import `MSFLParser`, `formulas_are_equivalent`, `check_logical_entailment`, `formulas_are_identical`, `formulas_are_matched_identical`, and `match_predicates` from it.
 - `utils/error_checking/` — the grammar- and spaCy-based error analysis pipeline used to produce the GROVES dataset.
 - `utils/datasets/`, `utils/inference/`, `utils/training/` — shared dataset loading, batch inference, and training helpers.
 
@@ -86,7 +85,7 @@ Decoder-only inference scripts (e.g. `inference/llama3_1_8B.py`, `inference/mist
 
 The inference scripts write predictions back into a JSON file under a per-model key (e.g. `t5_11b_pred`). The evaluation pipeline then operates directly on those files:
 
-**1. Exact match and logical equivalence.** `evaluation/calculate_metrics.py` enriches every prediction in place with four flags: `EXACT_MATCH`, `PREDICATE_MATCHED_EXACT_MATCH`, `EQUIVALENT`, `PREDICATE_MATCHED_EQUIVALENT`. The first two come from `utils/formula_matches/match.py` (whitespace- and case-insensitive string equality, with predicate alignment via normalised Levenshtein distance with threshold 0.6); the latter two are computed by parsing both formulas with the Lark grammar in `utils/cfg/syntax.lark` and checking unsatisfiability of $\lnot(\varphi \leftrightarrow \psi)$ via Z3 (10-second timeout per check).
+**1. Exact match and logical equivalence.** `evaluation/calculate_metrics.py` enriches every prediction in place with four flags: `EXACT_MATCH`, `PREDICATE_MATCHED_EXACT_MATCH`, `EQUIVALENT`, `PREDICATE_MATCHED_EQUIVALENT`. The first two come from [`unicode-fol-kit`](https://github.com/fvossel/unicode-fol-kit) (`formulas_are_identical` / `match_predicates`: whitespace- and case-insensitive string equality, with predicate alignment via normalised Levenshtein distance with threshold 0.6); the latter two are computed by parsing both formulas with `unicode-fol-kit`'s `MSFLParser` and checking unsatisfiability of $\lnot(\varphi \leftrightarrow \psi)$ via Z3 (10-second timeout per check).
 
 ```bash
 python -m evaluation.calculate_metrics results/groves_test_predicates_noise_t5_11b.json \
