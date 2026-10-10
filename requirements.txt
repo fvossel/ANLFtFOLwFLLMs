@@ -20,7 +20,7 @@ cryptography==50.0.0
 curated-tokenizers==0.0.9
 curated-transformers==0.1.1
 cymem==2.0.13
-datasets==4.8.5
+datasets==5.0.1
 dill==0.4.1
 distro==1.9.0
 docstring_parser==0.18.0
