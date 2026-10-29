@@ -26,7 +26,7 @@ distro==1.9.0
 docstring_parser==0.18.0
 dotenv==0.9.9
 en_core_web_trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl#sha256=272a31e9d8530d1e075351d30a462d7e80e31da23574f1b274e200f3fff35bf5
-filelock==3.29.0
+filelock==4.2.1
 frozenlist==1.8.0
 fsspec==2026.2.0
 google-auth==2.52.0
